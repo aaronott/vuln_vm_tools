@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# I could learn all the VBoxManage commands but since there are really only
+# about 3 commands that I use, so I just made it easier for me. I may add a bit
+# to the import so that I can more easily create a vm and import vmdk files.
+# Currently the import only works with ova files.
+
+
+case "$1" in
+	"status")
+  		echo "Available boxes:"
+  		VBoxManage list vms
+  
+  		echo ""
+  		echo "Running boxes:"
+  		VBoxManage list runningvms
+		;;
+
+	"start")
+  		if [ -z "$2" ]; then
+  			VBoxManage list vms
+			echo "Which box would you like to start?"
+  		else
+  			VBoxManage startvm "$2" --type headless
+  		fi
+		;;
+
+	"stop")
+  		if [ -z "$2" ]; then
+  			VBoxManage list runningvms
+			echo "Which box would you like to stop?"
+  		else
+  			VBoxManage controlvm "$2" poweroff
+  		fi
+		;;
+
+	"import")
+  		if [ -z "$2" ]; then
+			echo "What file would you like to import?"
+			ls -l *ova
+  		else
+			NETINF=$(route |grep default |sed -e's/  */ /g' | cut -d" " -f 8) 	# Perhaps there is a betterway
+												# to find the interface to use
+			echo "Importing $2"
+  			VBoxManage import "$2"
+			echo "Updating network for $2"
+			VBoxManage modifyvm "$2" --bridgeadapter1 $NETINF
+  		fi
+		;;
+	*)
+		echo "Usage: $0 [ start | stop | status | import ]"
+		echo ""
+		echo "  start <vm>  - Start the Virtual Machine"
+		echo "  stop <vm>   - Stop the Virtual Machine"
+		echo "  import <vm> - Import an ova file"
+		echo "  status      - Show a list of available and running machines"
+
+		;;
+esac

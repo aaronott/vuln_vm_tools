@@ -1,0 +1,113 @@
+#!/bin/bash
+
+VM=$1
+#set -x
+
+# figure out what needs to happen to this file
+# is it rar, zip, ova...
+filename="${VM##*/}"
+extension="${filename##*.}"
+echo "Filename $filename"
+echo "Extension $extension"
+
+#inf="enp3s0"
+inf=$(route |grep default |sed -e's/  */ /g' | cut -d" " -f 8) 	# Perhaps there is a betterway
+								# to find the interface to use
+currdir=$PWD
+outdir="/tmp/$$_out"
+output_vm_dir="/home/aott/VirtualBox VMs"
+# check to see if the file exists already
+if [ -a $filename ] 
+then
+	read -r -p "$filename has already been downloaded. Would you like to remove it and redownload? (y/N)" response
+	case "$response" in
+    		[yY][eE][sS]|[yY]) 
+			rm -f $filename
+			wget $VM
+        	;;
+    		*)
+			# do nothing and move on.
+        	;;
+	esac
+else
+	# if the file doesn't exist, let's download
+	wget $VM
+fi
+
+mkdir "$outdir" && cd "$outdir"
+
+case "$extension" in
+	rar)
+		echo "RaRings"
+		rar e "$currdir/$filename"    # extract the rar
+		;;
+	zip)
+		echo "Zip not implemented yet"
+		unzip "$currdir/$filename"    # extract the rar
+		;;
+	ova)
+		cp "$currdir/$filename" .
+		;;
+	*)
+		echo "Extension $extension unknown."
+esac
+
+
+# Now time to see what we are dealing with, ova or vmdk
+#vmfile=`ls *ova *vmdk`
+vmfile=`find . -iname "*.ova" -o -iname "*.vmdk"`
+if [ -a "$vmfile" ]
+then
+	vmfilename="${vmfile##*/}"
+	vmextension="${vmfile##*.}"
+
+	vmfilename=${vmfilename// /_}
+
+	echo "Casing the joint."
+
+	case "$vmextension" in
+		ova)
+			echo "OVA: $vmfilename"
+			echo $vmfilename
+			VBoxManage import "$vmfilename" --vsys 0 --vmname $vmfilename
+			VBoxManage modifyvm "$vmfilename" --nic1 bridged --bridgeadapter1 $inf
+			;;
+		vmdk)
+			echo $vmfilename
+			mkdir -p "$output_vm_dir/$vmfilename"
+
+			medium_file="$output_vm_dir/$vmfilename/$vmfilename"
+			echo "Medium: $medium_file"
+			echo "VMFile: $vmfile"
+			echo "VMFilename: $vmfilename"
+			echo "cp $vmfile $medium_file"
+			cp "$vmfile" "$medium_file"
+			ls -l "$medium_file"
+
+			VBoxManage createvm --name "$vmfilename" --ostype "Linux" --register
+			VBoxManage modifyvm "$vmfilename" --boot1 dvd --boot2 disk --boot3 none --boot4 none
+			VBoxManage modifyvm "$vmfilename" --memory 512 --vram 128 
+			VBoxManage modifyvm "$vmfilename" --nic1 bridged --bridgeadapter1 $inf
+
+			VBoxManage storagectl "$vmfilename" --name "IDE" --add ide --bootable on
+			VBoxManage storageattach "$vmfilename" --storagectl "IDE" --port 0 --device 0 --type hdd --medium "$medium_file"
+			;;
+		*)
+			echo "Unknown VM filetype"
+			;;
+	esac
+
+fi
+
+cd "$currdir"
+echo "$outdir"
+ls "$outdir"
+ls -l "$output_vm_dir"
+
+## Clean up time
+rm -rf $outdir
+
+
+
+
+
